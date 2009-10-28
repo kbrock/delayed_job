@@ -31,6 +31,13 @@ rescue LoadError
 end
 </pre>
 
+To use the rake task from a vendored gem, you'll need to add the following to your Rakefile:
+
+<pre>
+require(File.join(RAILS_ROOT, 'vendor', 'gems', 'collectiveidea-delayed_job-1.8.2', 'lib', 'delayed_job'))
+</pre>
+
+
 To install as a plugin:
 
 <pre>
