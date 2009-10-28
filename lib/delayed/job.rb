@@ -8,6 +8,8 @@ module Delayed
   # A job object that is persisted to the database.
   # Contains the work object as a YAML field.
   class Job < ActiveRecord::Base
+    #turn off cache money for this class (if cache money is installed)
+    is_cached(false) if self.respond_to?(:is_cached)
     @@max_attempts = 25
     @@max_run_time = 4.hours
     
