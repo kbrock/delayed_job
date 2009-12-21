@@ -1,5 +1,9 @@
 #!/usr/bin/env ruby
 
+#get around daemons <=1.0.9 bug
+pid_dir=File.expand_path(File.join(File.dirname(__FILE__), '..', 'tmp', 'pids'))
+Dir.mkdir(pid_dir) unless File.exist?(pid_dir)
+
 require File.expand_path(File.join(File.dirname(__FILE__), '..', 'config', 'environment'))
 require 'delayed/command'
 Delayed::Command.new(ARGV).daemonize

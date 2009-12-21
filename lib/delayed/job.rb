@@ -11,6 +11,7 @@ module Delayed
 
     #turn off cache money for this class (if cache money is installed)
     is_cached(false) if self.respond_to?(:is_cached)
+
     @@max_attempts = 25
     @@max_run_time = 4.hours
     
@@ -23,11 +24,38 @@ module Delayed
     }
     named_scope :by_priority, :order => 'priority DESC, run_at ASC'
 
+    # By default failed jobs are destroyed after too many attempts.
+    # If you want to keep them around (perhaps to inspect the reason
+    # for the failure), set this to false.
+    cattr_accessor :destroy_failed_jobs
+    self.destroy_failed_jobs = true
+
+    # By default successful jobs are destroyed after finished.
+    # If you want to keep them around (for statistics/monitoring),
+    # set this to false.
+    cattr_accessor :destroy_successful_jobs
+    self.destroy_successful_jobs = true
+
+    #TODO: does this belong here or in workier
+    # Every worker has a unique name which by default is the pid of the process.
+    # There are some advantages to overriding this with something which survives worker retarts:
+    # Workers can safely resume working on tasks which are locked by themselves. The worker will assume that it crashed before.
+    # cattr_accessor :worker_name
+    # self.worker_name = "host:#{Socket.gethostname} pid:#{Process.pid}" rescue "pid:#{Process.pid}"
+
+    # #TODO: does this belong here or in workier
+    # cattr_accessor :min_priority, :max_priority
+    # self.min_priority = nil
+    # self.max_priority = nil
+
+    NextTaskSQL         = '(run_at <= ? AND (locked_at IS NULL OR locked_at < ?) OR (locked_by = ?)) AND failed_at IS NULL AND finished_at IS NULL'
+    NextTaskOrder       = 'priority DESC, run_at ASC'
+
     ParseObjectFromYaml = /\!ruby\/\w+\:([^\s]+)/
 
     # When a worker is exiting, make sure we don't have any locked jobs.
-    def self.clear_locks!(worker_name)
-      update_all("locked_by = null, locked_at = null", ["locked_by = ?", worker_name])
+    def self.clear_locks!(name) #(name=worker_name)
+      update_all("locked_by = null, locked_at = null", ["locked_by = ?", name])
     end
 
     def failed?
@@ -52,6 +80,52 @@ module Delayed
 
     def payload_object=(object)
       self['handler'] = object.to_yaml
+    end
+
+    # Reschedule the job in the future (when a job fails).
+    # Uses an exponential scale depending on the number of failed attempts.
+    def reschedule(message, backtrace = [], time = nil)
+      if self.attempts < MAX_ATTEMPTS
+        time ||= Job.db_time_now + (attempts ** 4) + 5
+
+        self.attempts    += 1
+        self.run_at       = time
+        self.last_error   = message + "\n" + backtrace.join("\n")
+        self.unlock
+        save!
+      else
+        logger.info "* [JOB] PERMANENTLY removing #{self.name} because of #{attempts} consequetive failures."
+        destroy_failed_jobs ? destroy : update_attribute(:failed_at, Time.now)
+      end
+    end
+
+
+    # Try to run one job. Returns true/false (work done/work failed) or nil if job can't be locked.
+    def run_with_lock(max_run_time, worker_name)
+      logger.info "* [JOB] aquiring lock on #{name}"
+      unless lock_exclusively!(max_run_time, worker_name)
+        # We did not get the lock, some other worker process must have
+        logger.warn "* [JOB] failed to aquire exclusive lock for #{name}"
+        return nil # no work done
+      end
+
+      begin
+        runtime =  Benchmark.realtime do
+          now = Time.now
+          update_attribute(:first_started_at, now) if first_started_at.nil?
+          update_attribute(:last_started_at, now)
+          invoke_job # TODO: raise error if takes longer than max_run_time
+        end
+        destroy_successful_jobs ? destroy :
+          update_attribute(:finished_at, Time.now)
+        # TODO: warn if runtime > max_run_time ?
+        logger.info "* [JOB] #{name} completed after %.4f" % runtime
+        return true  # did work
+      rescue Exception => e
+        reschedule e.message, e.backtrace
+        log_exception(e)
+        return false  # work failed
+      end
     end
 
     # Add a job to the queue

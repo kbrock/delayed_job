@@ -59,33 +59,11 @@ If you are upgrading from a previous release, you will need to generate the new 
 script/generate delayed_job --skip-migration
 </pre>
 
-h2. Queuing Jobs
-
-Call @#send_later(method, params)@ on any object and it will be processed in the background.
-
-<pre>
-# without delayed_job
-Notifier.deliver_signup(@user)
-
-# with delayed_job
-Notifier.send_later :deliver_signup, @user
-</pre>
-
-If a method should always be run in the background, you can call @#handle_asynchronously@ after the method declaration:
-
-<pre>
-class Device
-  def deliver
-    # long running method
-  end
-  handle_asynchronously :deliver
-end
-
-device = Device.new
-device.deliver
-</pre>
-
 h2. Running Jobs
+
+You can invoke @rake jobs:work@ which will start working off jobs. You can cancel the rake task with @CTRL-C@. 
+
+OR
 
 @script/delayed_job@ can be used to manage a background process which will start working off jobs.
 
@@ -104,9 +82,11 @@ You can also invoke @rake jobs:work@ which will start working off jobs. You can 
 
 h2. Custom Jobs
 
+h3. Original method
+
 Jobs are simple ruby objects with a method called perform. Any object which responds to perform can be stuffed into the jobs table. Job objects are serialized to yaml so that they can later be resurrected by the job runner. 
 
-<pre>
+<pre><code>
 class NewsletterJob < Struct.new(:text, :emails)
   def perform
     emails.each { |e| NewsletterMailer.deliver_text_to_email(text, e) }
@@ -114,7 +94,43 @@ class NewsletterJob < Struct.new(:text, :emails)
 end  
   
 Delayed::Job.enqueue NewsletterJob.new('lorem ipsum...', Customers.find(:all).collect(&:email))
+</code></pre>
+
+h3. Send Later
+
+Call @#send_later(method, params)@ on any object and it will be processed in the background.
+
+Example of your own code:
+
+<pre>  
+  BatchImporter.new(Shop.find(1)).send_later(:import_massive_csv, massive_csv)                                                    
 </pre>
+
+This is not limited to your own methods. You can also call ActiveMailer to deliver email in the background:
+
+<pre>
+# without delayed_job
+Notifier.deliver_signup(@user)
+
+# with delayed_job
+Notifier.send_later :deliver_signup, @user
+</pre>
+
+h3. Always run later
+
+If a method should always be run in the background, you can call @#handle_asynchronously@ after the method declaration:
+
+<pre><code>
+class Device
+  def deliver
+    # long running method
+  end
+  handle_asynchronously :deliver
+end
+
+device = Device.new
+device.deliver
+</code></pre>
 
 h2. Gory Details
 
@@ -129,6 +145,9 @@ The library evolves around a delayed_jobs table which looks as follows:
     table.datetime :locked_at                    # Set when a client is working on this object
     table.datetime :failed_at                    # Set when all retries have failed (actually, by default, the record is deleted instead)
     table.string   :locked_by                    # Who is working on this object (if locked)
+    table.datetime :first_started_at		 # When first worker picked it up
+    table.datetime :last_started_at		 # When last worker picked it up (same as first_started_at when no retries)
+    table.datetime :finished_at			 # Used for statiscics / monitoring
     table.timestamps
   end
 
@@ -140,22 +159,30 @@ With the default of 25 attempts, the last retry will be 20 days later, with the 
 The default Worker.max_run_time is 4.hours. If your job takes longer than that, another computer could pick it up. It's up to you to
 make sure your job doesn't exceed this time. You should set this to the longest time you think the job could take.
 
-By default, it will delete failed jobs (and it always deletes successful jobs). If you want to keep failed jobs, set
-Delayed::Worker.destroy_failed_jobs = false. The failed jobs will be marked with non-null failed_at.
+By default, it will delete failed jobs. If you want to keep failed jobs, set
+@Delayed::Worker.destroy_failed_jobs = false@. The failed jobs will be marked with non-null failed_at.
+
+Same thing for successful jobs. They're deleted by default and, to keep them, set @Delayed::Job.destroy_successful_jobs = false@. They will be marked with finished_at. This is useful for gathering statistics like how long a job took:
+* to be picked up by the first worker: first_started_at - created_at
+* in one successful run (the last one that didn't fail): finished_at - last_started_at
+* in failed retries: last_started_at - first_started_at
 
 Here is an example of changing job parameters in Rails:
 
-<pre>
+<pre><code>
 # config/initializers/delayed_job_config.rb
 Delayed::Worker.destroy_failed_jobs = false
+Delayed::Job.destroy_successful_jobs = false
 Delayed::Worker.sleep_delay = 60
 Delayed::Worker.max_attempts = 3
 Delayed::Worker.max_run_time = 5.minutes
-</pre>
+</code></pre>
+
+Note: If your error messages are long, consider changing last_error field to a :text instead of a :string (255 character limit).
 
 h3. Cleaning up
 
-You can invoke @rake jobs:clear@ to delete all jobs in the queue.
+You can invoke @rake jobs:clear@ to delete all jobs in the queue. There are also the self-explanatory @rake jobs:clear:finished@ and @rake jobs:clear:failed@.
 
 h2. Mailing List
 

@@ -20,6 +20,9 @@ ActiveRecord::Schema.define do
     table.datetime :locked_at
     table.string   :locked_by
     table.datetime :failed_at
+    table.datetime :first_started_at
+    table.datetime :last_started_at
+    table.datetime :finished_at
     table.timestamps
   end
 
