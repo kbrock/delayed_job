@@ -54,7 +54,7 @@ module Delayed
       # Re-open file handles
       @files_to_reopen.each do |file|
         begin
-          file.reopen File.join(RAILS_ROOT, 'log', 'delayed_job.log'), 'w+'
+          file.reopen File.join(RAILS_ROOT, 'log', 'delayed_job.log'), 'a+'
           file.sync = true
         rescue ::Exception
         end
@@ -63,9 +63,9 @@ module Delayed
       Delayed::Worker.logger = Rails.logger
       ActiveRecord::Base.connection.reconnect!
       
-      Delayed::Job.worker_name = "#{worker_name} #{Delayed::Job.worker_name}"
-      
-      Delayed::Worker.new(@options).start  
+      worker = Delayed::Worker.new(@options)
+      worker.name_prefix = "#{worker_name} "
+      worker.start
     rescue => e
       Rails.logger.fatal e
       STDERR.puts e.message

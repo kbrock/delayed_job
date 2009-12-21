@@ -1,4 +1,4 @@
-require File.dirname(__FILE__) + '/database'
+require 'spec_helper'
 
 class SimpleJob
   cattr_accessor :runs; self.runs = 0
@@ -73,15 +73,8 @@ describe 'random ruby objects' do
   end
 
   it "should ignore ActiveRecord::RecordNotFound errors because they are permanent" do
-
-    ErrorObject.new.send_later(:throw)
-
-    Delayed::Job.count.should == 1
-
-    Delayed::Job.reserve_and_run_one_job
-
-    Delayed::Job.count.should == 0
-
+    job = ErrorObject.new.send_later(:throw)
+    lambda { job.invoke_job }.should_not raise_error
   end
 
   it "should store the object as string if its an active record" do
