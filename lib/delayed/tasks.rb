@@ -22,12 +22,22 @@ namespace :jobs do
     task :failed => [:merb_env, :environment] do
       Delayed::Job.delete_all('failed_at IS NOT NULL')
     end
-
   end
 
   desc "Start a delayed_job worker."
   task :work => [:merb_env, :environment] do
     Delayed::Worker.new(:min_priority => ENV['MIN_PRIORITY'], :max_priority => ENV['MAX_PRIORITY']).start
   end
-end
 
+  namespace :daemon do
+    desc "Start a background delayed_job worker"
+    task :start do
+      `#{File.expand_path(File.dirname(__FILE__) + '/../../script/delayed_job')} start`
+    end
+
+    desc "Stop background delayed_job worker"
+    task :stop do
+      `#{File.expand_path(File.dirname(__FILE__) + '/../../script/delayed_job')} stop`
+    end
+  end
+end

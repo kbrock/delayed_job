@@ -83,7 +83,7 @@ module Delayed
         Timeout.timeout(self.class.max_run_time.to_i) { job.invoke_job }
 
         destroy_successful_jobs ? job.destroy :
-          job.update_attribute(:finished_at, Time.now)
+          job.update_attributes({:finished_at => Delayed::Job.db_time_now,:locked_at => nil, :locked_by => nil})
       end
       # TODO: warn if runtime > max_run_time ?
       say "* [JOB] #{name} completed after %.4f" % runtime
@@ -103,7 +103,8 @@ module Delayed
         job.save!
       else
         say "* [JOB] PERMANENTLY removing #{job.name} because of #{job.attempts} consecutive failures.", Logger::INFO
-        self.class.destroy_failed_jobs ? job.destroy : job.update_attribute(:failed_at, Delayed::Job.db_time_now)
+        self.class.destroy_failed_jobs ? job.destroy :
+        job.update_attributes({:failed_at => Delayed::Job.db_time_now,:locked_at => nil, :locked_by => nil})
       end
     end
 

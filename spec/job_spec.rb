@@ -68,7 +68,7 @@ describe Delayed::Job do
 
   it "should never find finished jobs" do
     @job = Delayed::Job.create :payload_object => SimpleJob.new,
-      :finished_at => Time.now
+      :finished_at => Delayed::Job.db_time_now
     Delayed::Job.find_available(1).length.should == 0
   end
 

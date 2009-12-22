@@ -39,7 +39,6 @@ avg_run_time.type GAUGE
     result = mysql.query("SELECT first_started_at, finished_at \
                         FROM delayed_jobs WHERE \
                        finished_at > NOW() - 5 * 60")
-    
     value = 0.0
     result.each_hash do |hash|
       values = [hash['finished_at'],hash['first_started_at']].map { |v|
@@ -48,6 +47,10 @@ avg_run_time.type GAUGE
       run_time = (values[0] - values[1])
       value += run_time / result.num_rows
     end
+    # value = mysql.query("SELECT avg(finished_at-first_started_at) \
+    #                     FROM delayed_jobs WHERE \
+    #                    finished_at > NOW() - 5 * 60")[0]
+
     puts "avg_run_time.value #{value}"
   end
 

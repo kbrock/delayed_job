@@ -5,6 +5,19 @@ module Delayed
   class DeserializationError < StandardError
   end
 
+    # table.integer  :priority, :default => 0      # Allows some jobs to jump to the front of the queue
+    # table.integer  :attempts, :default => 0      # Provides for retries, but still fail eventually.
+    # table.text     :handler                      # YAML-encoded string of the object that will do work
+    # table.text     :last_error                   # reason for last failure (See Note below)
+    # table.datetime :run_at                       # When to run. Could be Time.zone.now for immediately, or sometime in the future.
+    # table.datetime :locked_at                    # Set when a client is working on this object
+    # table.datetime :failed_at                    # Set when all retries have failed (actually, by default, the record is deleted instead)
+    # table.string   :locked_by                    # Who is working on this object (if locked)
+    # table.datetime :first_started_at             # When first worker picked it up
+    # table.datetime :last_started_at              # When last worker picked it up (same as first_started_at when no retries)
+    # table.datetime :finished_at                  # Used for statiscics / monitoring
+    # table.timestamps
+
   # A job object that is persisted to the database.
   # Contains the work object as a YAML field.
   class Job < ActiveRecord::Base
@@ -79,26 +92,35 @@ module Delayed
     def lock_exclusively!(max_run_time, worker)
       now = self.class.db_time_now
       
+      #whether this job has run before in the past
+      first_time=self.first_started_at.nil?
+
+      #attributes to modify in the job table
       conditions="locked_at = ?, last_started_at = ?"
       attrs=[now,now]
-      #if it hasn't been run, then we want to also update that
-      if self.first_started_at.nil?
+
+      #if it hasn't been run, then we want to also update first_started_at
+      if first_time
         conditions+=", first_started_at = ?"
         attrs << now
       end
-      affected_rows = if locked_by != worker
+
+      if locked_by != worker
         # We don't own this job so we will also update the locked_by name
         conditions+=", locked_by = ?"
         attrs.unshift(conditions)
         attrs << worker
-        self.class.update_all(attrs, ["id = ? and (locked_at is null or locked_at < ?) and (run_at <= ?)", id, (now - max_run_time.to_i), now])
+        affected_rows = self.class.update_all(attrs,
+          ["id = ? and (locked_at is null or locked_at < ?) and (run_at <= ?)", id, (now - max_run_time.to_i), now])
       else
         # We already own this job, this may happen if the job queue crashes.
         # Simply resume and update the locked_at
         attrs.unshift(conditions)
-        self.class.update_all(attrs, ["id = ? and locked_by = ?", id, worker])
+        affected_rows = self.class.update_all(attrs, ["id = ? and locked_by = ?", id, worker])
       end
+
       if affected_rows == 1
+        #update the attributes to the same values that were set in the database
         self.locked_at          = now
         self.last_started_at    = now
         self.first_started_at ||= now
