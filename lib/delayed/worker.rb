@@ -9,9 +9,17 @@ module Delayed
     # (perhaps to inspect the reason for the failure), set this to false.
     cattr_accessor :destroy_failed_jobs
     self.destroy_failed_jobs = true
-    
+
+    # By default successful jobs are destroyed after finished.
+    # If you want to keep them around (for statistics/monitoring),
+    # set this to false.
+    cattr_accessor :destroy_successful_jobs
+    self.destroy_successful_jobs = true
+
     self.logger = if defined?(Merb::Logger)
       Merb.logger
+    elsif defined?(Rails)
+      Rails.logger
     elsif defined?(RAILS_DEFAULT_LOGGER)
       RAILS_DEFAULT_LOGGER
     end
@@ -73,7 +81,9 @@ module Delayed
     def run(job)
       runtime =  Benchmark.realtime do
         Timeout.timeout(self.class.max_run_time.to_i) { job.invoke_job }
-        job.destroy
+
+        destroy_successful_jobs ? job.destroy :
+          job.update_attribute(:finished_at, Time.now)
       end
       # TODO: warn if runtime > max_run_time ?
       say "* [JOB] #{name} completed after %.4f" % runtime
@@ -82,7 +92,7 @@ module Delayed
       handle_failed_job(job, e)
       return false  # work failed
     end
-    
+
     # Reschedule the job in the future (when a job fails).
     # Uses an exponential scale depending on the number of failed attempts.
     def reschedule(job, time = nil)
@@ -104,6 +114,7 @@ module Delayed
 
   protected
     
+    #TODO: override this one
     def handle_failed_job(job, error)
       job.last_error = error.message + "\n" + error.backtrace.join("\n")
       say "* [JOB] #{name} failed with #{error.class.name}: #{error.message} - #{job.attempts} failed attempts", Logger::ERROR

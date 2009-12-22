@@ -43,6 +43,11 @@ describe Delayed::Job do
     Delayed::Job.first.run_at.should be_close(later, 1)
   end
 
+  it "should call perform on jobs when running work_off" do
+    job= Delayed::Job.enqueue SimpleJob.new
+    lambda { job.invoke_job }.should change { SimpleJob.runs }.from(0).to(1)
+  end
+
   it "should work with eval jobs" do
     $eval_job_ran = false
 
@@ -61,112 +66,10 @@ describe Delayed::Job do
     lambda { job.invoke_job }.should change { M::ModuleJob.runs }.from(0).to(1)
   end
 
-  it "should be destroyed if it succeeded and we want to destroy jobs" do
-    default = Delayed::Job.destroy_successful_jobs
-    Delayed::Job.destroy_successful_jobs = true
-
-    Delayed::Job.enqueue SimpleJob.new
-    Delayed::Worker.work_off
-
-    Delayed::Job.count.should == 0
-
-    Delayed::Job.destroy_successful_jobs = default
-  end
-
-  it "should be kept if it succeeded and we don't want to destroy jobs" do
-    default = Delayed::Job.destroy_successful_jobs
-    Delayed::Job.destroy_successful_jobs = false
-
-    Delayed::Job.enqueue SimpleJob.new
-    Delayed::Worker.work_off
-
-    Delayed::Job.count.should == 1
-
-    Delayed::Job.destroy_successful_jobs = default
-  end
-
-  it "should be finished if it succeeded and we don't want to destroy jobs" do
-    default = Delayed::Job.destroy_successful_jobs
-    Delayed::Job.destroy_successful_jobs = false
-    @job = Delayed::Job.create :payload_object => SimpleJob.new
-
-    @job.reload.finished_at.should == nil
-    Delayed::Worker.work_off
-    @job.reload.finished_at.should_not == nil
-
-    Delayed::Job.destroy_successful_jobs = default
-  end
-
   it "should never find finished jobs" do
     @job = Delayed::Job.create :payload_object => SimpleJob.new,
       :finished_at => Time.now
     Delayed::Job.find_available(1).length.should == 0
-  end
-
-  it "should record time when it was picked up by the first worker" do
-    default = Delayed::Job.destroy_successful_jobs
-    Delayed::Job.destroy_successful_jobs = false
-    @job = Delayed::Job.create :payload_object => SimpleJob.new
-
-    @job.reload.first_started_at.should == nil
-    @job.reload.last_started_at.should == nil
-    Delayed::Worker.work_off
-    @job.reload.first_started_at.should_not == nil
-    @job.reload.last_started_at.should_not == nil
-
-    Delayed::Job.destroy_successful_jobs = default
-  end
-
-  it "should not update first_started_at on retries" do
-    default = Delayed::Job.destroy_successful_jobs
-    Delayed::Job.destroy_successful_jobs = false
-    @job = Delayed::Job.create :payload_object => ErrorJob.new
-
-    Delayed::Worker.work_off
-    first_started_at = @job.reload.first_started_at
-
-    @job.run_at = Time.now
-    @job.save!
-    time = Time.now + 1.hour
-    Time.stub!(:now).and_return(time)
-    Delayed::Worker.work_off
-
-    @job.reload.first_started_at.should == first_started_at
-
-    Delayed::Job.destroy_successful_jobs = default
-  end
-
-  it "should update last_started_at on retries" do
-    default = Delayed::Job.destroy_successful_jobs
-    Delayed::Job.destroy_successful_jobs = false
-    @job = Delayed::Job.create :payload_object => ErrorJob.new
-
-    Delayed::Worker.work_off
-    first_started_at = @job.reload.first_started_at
-
-    @job.run_at = Time.now
-    @job.save!
-    time = Time.now + 1.hour
-    Time.stub!(:now).and_return(time)
-    Delayed::Worker.work_off
-
-    @job.reload.last_started_at.should_not == first_started_at
-
-    Delayed::Job.destroy_successful_jobs = default
-  end
-
-  it "should re-schedule by about 1 second at first and increment this more and more minutes when it fails to execute properly" do
-    Delayed::Job.enqueue ErrorJob.new
-    Delayed::Worker.work_off(1)
-
-    job = Delayed::Job.find(:first)
-
-    job.last_error.should =~ /did not work/
-    job.last_error.should =~ /job_spec.rb:10:in `perform'/
-    job.attempts.should == 1
-
-    job.run_at.should > Delayed::Job.db_time_now - 10.minutes
-    job.run_at.should < Delayed::Job.db_time_now + 10.minutes
   end
 
   it "should raise an DeserializationError when the job class is totally unknown" do

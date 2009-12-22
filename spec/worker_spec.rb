@@ -115,8 +115,9 @@ describe Delayed::Worker do
       @job.run_at.should > Delayed::Job.db_time_now - 10.minutes
       @job.run_at.should < Delayed::Job.db_time_now + 10.minutes
     end
+    #TODO: check that it is rescheduling in the correct amount of time (1 second, ...)
   end
-  
+
   context "reschedule" do
     before do
       @job = Delayed::Job.create :payload_object => SimpleJob.new
@@ -156,6 +157,81 @@ describe Delayed::Worker do
       
     end
   end
+  context "not destroying jobs" do
+    before do
+      Delayed::Worker.destroy_successful_jobs = false
+    end
+
+    it "should be kept" do
+      job=Delayed::Job.enqueue SimpleJob.new
+      @worker.run(job)
+
+      Delayed::Job.count.should == 1
+    end
+
+    it "should be finished" do
+      job = Delayed::Job.enqueue SimpleJob.new
+
+      job.reload.finished_at.should == nil
+      @worker.run(job)
+      job.reload.finished_at.should_not == nil
+    end
+
+    #TODO: note, db does not have updated first_started_at / last_started_at value (not critical - and don't want to take hit)
+    #@obvio171 updated the actual record - but it took an extra 2 db hits
+    #removed reload from all *_started_at lines
+    it "should record time when it was picked up by the first worker" do
+      job = Delayed::Job.enqueue SimpleJob.new
+      job.reload.first_started_at.should == nil
+      job.reload.last_started_at.should == nil
+      @worker.work_off(1)
+      job.reload.first_started_at.should_not == nil
+      job.reload.last_started_at.should_not == nil
+    end
+
+    #see comment above, remvoed reload from *_started_at
+    it "should not update first_started_at on retries" do
+      job = Delayed::Job.enqueue ErrorJob.new
+
+      @worker.work_off(1)
+      first_started_at = job.reload.first_started_at
+
+      now = Delayed::Job.send :db_time_now
+      job.run_at = now
+      job.save!
+
+      Delayed::Job.stub!(:db_time_now).and_return(now + 1.hour)
+      @worker.work_off(1)
+
+      job.reload.first_started_at.should == first_started_at
+    end
+
+    #see comment above, remvoed reload from *_started_at
+    it "should update last_started_at on retries" do
+      job = Delayed::Job.create :payload_object => ErrorJob.new
+
+      @worker.work_off(1)
+      first_started_at = job.reload.first_started_at
+
+      now = Delayed::Job.send :db_time_now
+      job.run_at = now
+      job.save!
+
+      Delayed::Job.stub!(:db_time_now).and_return(now + 1.hour)
+      @worker.work_off(1)
+
+      job.reload.last_started_at.should_not == first_started_at
+    end
+  end
   
+  context "successful jobs" do
+    it "should be destroyed if we want to destroy jobs" do
+      Delayed::Worker.destroy_successful_jobs = true
+      job=Delayed::Job.enqueue SimpleJob.new
+      @worker.run(job)
+
+      Delayed::Job.count.should == 0
+    end
+  end
   
 end
