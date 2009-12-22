@@ -30,6 +30,15 @@ module Delayed
       {:conditions => ['(run_at <= ? AND (locked_at IS NULL OR locked_at < ?) OR locked_by = ?) AND failed_at IS NULL and finished_at IS NULL', db_time_now, db_time_now - max_run_time, worker_name]}
     }
     named_scope :by_priority, :order => 'priority DESC, run_at ASC'
+    named_scope :recent_first, :order => 'id DESC'
+    named_scope :oldest_first, :order => 'id'
+
+    named_scope :retry,    :conditions => 'locked_at IS NULL AND failed_at IS NULL AND finished_at IS NULL AND first_started_at IS NOT NULL'
+    named_scope :finished, :conditions => 'finished_at IS NOT NULL'
+    named_scope :failed,   :conditions => 'failed_at IS NOT NULL'
+    #simplified ready clause for status pages
+    named_scope :ready,    :conditions => 'locked_at IS NULL and failed_at IS NULL and finished_at IS NULL'
+    #do we want a scope for outliers
 
     ParseObjectFromYaml = /\!ruby\/\w+\:([^\s]+)/
 
