@@ -178,9 +178,6 @@ describe Delayed::Worker do
       job.reload.finished_at.should_not == nil
     end
 
-    #TODO: note, db does not have updated first_started_at / last_started_at value (not critical - and don't want to take hit)
-    #@obvio171 updated the actual record - but it took an extra 2 db hits
-    #removed reload from all *_started_at lines
     it "should record time when it was picked up by the first worker" do
       job = Delayed::Job.enqueue SimpleJob.new
       job.reload.first_started_at.should == nil
