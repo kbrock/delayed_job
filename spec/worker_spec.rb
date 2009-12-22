@@ -115,7 +115,7 @@ describe Delayed::Worker do
       @job.run_at.should > Delayed::Job.db_time_now - 10.minutes
       @job.run_at.should < Delayed::Job.db_time_now + 10.minutes
     end
-    #TODO: check that it is rescheduling in the correct amount of time (1 second, ...)
+    #TODO: check that it is rescheduling in the correct amount of time (1 second, ...)    
   end
 
   context "reschedule" do
@@ -157,6 +157,7 @@ describe Delayed::Worker do
       
     end
   end
+
   context "not destroying jobs" do
     before do
       Delayed::Worker.destroy_successful_jobs = false
@@ -233,5 +234,14 @@ describe Delayed::Worker do
       Delayed::Job.count.should == 0
     end
   end
+
+  it "should ignore ActiveRecord::RecordNotFound errors because they are permanent" do
+    Delayed::Job.count.should == 0
+    job = ErrorObject.new.send_later(:throw)
+    Delayed::Job.count.should == 1
+    lambda { @worker.work_off(1) }.should_not raise_error
+    Delayed::Job.count.should == 0
+  end
+  
   
 end

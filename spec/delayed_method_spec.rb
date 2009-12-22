@@ -40,9 +40,7 @@ describe 'random ruby objects' do
   before       { Delayed::Job.delete_all }
 
   it "should respond_to :send_later method" do
-
     RandomRubyObject.new.respond_to?(:send_later)
-
   end
 
   it "should raise a ArgumentError if send_later is called but the target method doesn't exist" do
@@ -70,11 +68,6 @@ describe 'random ruby objects' do
     RandomRubyObject.new.send_later(:say_hello)
 
     Delayed::Job.count.should == 1
-  end
-
-  it "should ignore ActiveRecord::RecordNotFound errors because they are permanent" do
-    job = ErrorObject.new.send_later(:throw)
-    lambda { job.invoke_job }.should_not raise_error
   end
 
   it "should store the object as string if its an active record" do
