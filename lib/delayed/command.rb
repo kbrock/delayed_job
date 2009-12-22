@@ -29,7 +29,8 @@ module Delayed
           @options[:max_priority] = n
         end
         opts.on('-n', '--number_of_workers=workers', "Number of unique workers to spawn") do |worker_count|
-          @worker_count = worker_count.to_i rescue 1
+          @worker_count = worker_count.to_i
+          @worker_count = 1 if @worker_count == 0
         end
       end
       @args = opts.parse!(args)
