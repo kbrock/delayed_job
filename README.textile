@@ -12,6 +12,12 @@ It is a direct extraction from Shopify where the job table is responsible for a 
 * batch imports 
 * spam checks 
 
+NOTE: DIFFERENCES FROM standard delayed_job
+
+* priority is inverse. Lower is better. (thank to http://www.elevatedrails.com/articles/2009/11/04/speeding-up-delayed-job/ )
+* completed and failed tasks are stored in the databse (per http://github.com/obvio171/delayed_job )
+* summary records are stored for reporting purposes (so we don't have to keep around failed/completed jobs)
+
 h2. Installation
 
 To install as a gem, add the following to @config/environment.rb@:
@@ -138,7 +144,7 @@ The library evolves around a delayed_jobs table which looks as follows:
 
 <pre><code>
   create_table :delayed_jobs, :force => true do |table|
-    table.integer  :priority, :default => 0      # Allows some jobs to jump to the front of the queue
+    table.integer  :priority, :default => 100    # Allows some jobs to jump to the front of the queue
     table.integer  :attempts, :default => 0      # Provides for retries, but still fail eventually.
     table.text     :handler                      # YAML-encoded string of the object that will do work
     table.text     :last_error                   # reason for last failure (See Note below)

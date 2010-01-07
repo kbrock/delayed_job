@@ -1,7 +1,7 @@
 class CreateDelayedJobs < ActiveRecord::Migration
   def self.up
     create_table :delayed_jobs, :force => true do |table|
-      table.integer  :priority, :default => 0      # Allows some jobs to jump to the front of the queue
+      table.integer  :priority, :default => 100    # Allows some jobs to jump to the front of the queue
       table.integer  :attempts, :default => 0      # Provides for retries, but still fail eventually.
       table.text     :handler                      # YAML-encoded string of the object that will do work
       table.text     :last_error                   # reason for last failure (See Note below)
@@ -13,6 +13,8 @@ class CreateDelayedJobs < ActiveRecord::Migration
       table.datetime :last_started_at              # When last worker picked it up (same as first_started_at when no retries)
       table.datetime :finished_at                  # Used for statiscics / monitoring
       table.timestamps
+
+      add_index :delayed_jobs, [:priority, :run_at], :name => "delayed_jobs_priority"
     end
 
   end
