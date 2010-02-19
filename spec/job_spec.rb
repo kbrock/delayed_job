@@ -201,13 +201,14 @@ describe Delayed::Job do
       Delayed::Worker.min_priority = nil
     end
 
+    #note: jobs are ordered from low to high
     it "should fetch jobs ordered by priority" do
       number_of_jobs = 10
       number_of_jobs.times { Delayed::Job.enqueue SimpleJob.new, rand(10) }
       jobs = Delayed::Job.find_available('worker', 10)
       ordered = true
       jobs[1..-1].each_index{ |i| 
-        if (jobs[i].priority < jobs[i+1].priority)
+        if (jobs[i].priority > jobs[i+1].priority)
           ordered = false
           break
         end
