@@ -192,6 +192,13 @@ describe Delayed::Job do
       
       Delayed::Job.last.name.should == 'Story#save'
     end
+
+    it "should not fail for unknown classes" do
+      job=Delayed::Job.create(:payload_object => ErrorJob.new )
+      job['handler'] = "--- !ruby/object:JobThatDoesNotExist {}"
+      job.save
+      lambda { job.name }.should_not raise_error
+    end
   end
   
   context "worker prioritization" do

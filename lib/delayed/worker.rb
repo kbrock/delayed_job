@@ -103,13 +103,18 @@ module Delayed
     rescue Exception => e
       handle_failed_job(job, e)
       return false  # work failed
+    rescue Delayed::DeserializationError => e
+      handle_failed_job(job, e, true)
+      return false  # work failed
     end
 
     # Reschedule the job in the future (when a job fails).
     # Uses an exponential scale depending on the number of failed attempts.
-    def reschedule(job, time = nil)
-      if (job.attempts += 1) < self.class.max_attempts
-        time ||= Job.db_time_now + (job.attempts ** 4) + 5
+    def reschedule(job, force_kill=false)
+      # if we are not forcing a kill (default)
+      # and the number of attempts < number we want to try
+      if ! force_kill && (job.attempts += 1) < self.class.max_attempts
+        time = Job.db_time_now + (job.attempts ** 4) + 5
         job.run_at = time
         job.unlock
         job.save!
@@ -131,10 +136,10 @@ module Delayed
   protected
     
     #TODO: override this one
-    def handle_failed_job(job, error)
+    def handle_failed_job(job, error, dont_run_again=false)
       job.last_error = error.message + "\n" + error.backtrace.join("\n")
       say "* [JOB] #{name} failed with #{error.class.name}: #{error.message} - #{job.attempts} failed attempts", Logger::ERROR
-      reschedule(job)
+      reschedule(job, dont_run_again)
     end
     
     # Run the next job we can get an exclusive lock on.

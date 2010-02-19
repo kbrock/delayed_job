@@ -64,6 +64,8 @@ module Delayed
         else
           payload.class.name
         end
+      rescue
+        "Error"
       end
     end
 

@@ -115,6 +115,12 @@ describe Delayed::Worker do
       @job.run_at.should > Delayed::Job.db_time_now - 10.minutes
       @job.run_at.should < Delayed::Job.db_time_now + 10.minutes
     end
+
+    it "should not raise an error for a serialization error" do
+      @job = Delayed::Job.enqueue SimpleJob.new
+      @job.update_attributes(:handler => "--- !ruby/object:JobThatDoesNotExist {}")
+      @worker.run(@job)
+    end
     #TODO: check that it is rescheduling in the correct amount of time (1 second, ...)    
   end
 
@@ -136,6 +142,11 @@ describe Delayed::Worker do
       it "should not be destroyed if failed fewer than Worker.max_attempts times" do
         @job.should_not_receive(:destroy)
         (Delayed::Worker.max_attempts - 1).times { @worker.reschedule(@job) }
+      end
+
+      it "should be destroyed if force sent true" do
+        @job.should_receive(:destroy)
+        @worker.reschedule(@job,true)
       end
     end
     
