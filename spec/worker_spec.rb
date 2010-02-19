@@ -158,7 +158,7 @@ describe Delayed::Worker do
     end
   end
 
-  context "not destroying jobs" do
+  context "successful job with destroy turned off" do
     before do
       Delayed::Worker.destroy_successful_jobs = false
     end
@@ -220,10 +220,26 @@ describe Delayed::Worker do
 
       job.reload.last_started_at.should_not == first_started_at
     end
+
+    it "should clear errors if clear errors turned on" do
+      Delayed::Worker.clear_successful_errors=true
+      job=Delayed::Job.enqueue SimpleJob.new
+      job.update_attributes(:last_error => 'previous error')
+      @worker.run(job)
+      job.reload.last_error.should == nil
+    end
+
+    it "should not clear errors if clear errors turned off" do
+      Delayed::Worker.clear_successful_errors=false
+      job=Delayed::Job.enqueue SimpleJob.new
+      job.update_attributes(:last_error => 'previous error')
+      @worker.run(job)
+      job.reload.last_error.should == 'previous error'
+    end
   end
   
-  context "successful jobs" do
-    it "should be destroyed if we want to destroy jobs" do
+  context "successful jobs with destroy turned on" do
+    it "should be destroyed" do
       Delayed::Worker.destroy_successful_jobs = true
       job=Delayed::Job.enqueue SimpleJob.new
       @worker.run(job)
