@@ -115,8 +115,11 @@ module Delayed
         job.save!
       else
         say "* [JOB] PERMANENTLY removing #{job.name} because of #{job.attempts} consecutive failures.", Logger::INFO
-        self.class.destroy_failed_jobs ? job.destroy :
-        job.update_attributes({:failed_at => Delayed::Job.db_time_now,:locked_at => nil, :locked_by => nil})
+        if self.class.destroy_failed_jobs
+            job.destroy
+        else
+          job.update_attributes({:failed_at => Delayed::Job.db_time_now,:locked_at => nil, :locked_by => nil})
+        end
       end
     end
 
