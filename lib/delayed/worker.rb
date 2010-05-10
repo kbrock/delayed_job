@@ -34,9 +34,15 @@ module Delayed
     attr_accessor :name_prefix
 
     def initialize(options={})
-      @quiet = options[:quiet]
-      self.class.min_priority = options[:min_priority] if options.has_key?(:min_priority)
-      self.class.max_priority = options[:max_priority] if options.has_key?(:max_priority)
+      @quiet = options.delete(:quiet)
+      options.each_pair do |key,value|
+        setter="#{key}="
+        if self.class.respond_to? setter
+          self.class.send(setter,value.to_i) if value.present?
+        else
+          say "unknown worker attribute #{key}"
+        end
+      end
     end
 
     # Every worker has a unique name which by default is the pid of the process. There are some
