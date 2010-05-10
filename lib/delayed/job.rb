@@ -56,16 +56,36 @@ module Delayed
       @payload_object ||= deserialize(self['handler'])
     end
 
+    def deserializes?
+      @deserializes||=
+        begin
+          payload_object
+          true
+        rescue DeserializationError
+          false
+        end
+    end
+
     def name
-      @name ||= begin
+      @name ||= if deserializes?
         payload = payload_object
         if payload.respond_to?(:display_name)
           payload.display_name
         else
           payload.class.name
         end
-      rescue
+      else
         "Error"
+      end
+    end
+
+    #would be better if we could get all params for the object and do a hash
+    def params
+      if deserializes?
+        payload=payload_object
+        payload.respond_to?(:to_h) ? payload.to_h : nil
+      else
+        nil
       end
     end
 
@@ -150,6 +170,7 @@ module Delayed
 
     # Moved into its own method so that new_relic can trace it.
     def invoke_job
+      self.attempts += 1
       payload_object.perform
     end
 
@@ -159,10 +180,12 @@ module Delayed
       handler = YAML.load(source) rescue nil
 
       unless handler.respond_to?(:perform)
-        if handler.nil? && source =~ ParseObjectFromYaml
+        #yaml in 1.8.5 does not namespace the handler.class - so bypass for now
+        #used to use handler.class if ! handler.nil?
+        if source =~ ParseObjectFromYaml
           handler_class = $1
         end
-        attempt_to_load(handler_class || handler.class)
+        attempt_to_load(handler_class || handler.class.to_s)
         handler = YAML.load(source)
       end
 
