@@ -9,12 +9,15 @@ class CreateDelayedJobs < ActiveRecord::Migration
       table.datetime :locked_at                    # Set when a client is working on this object
       table.datetime :failed_at                    # Set when all retries have failed (actually, by default, the record is deleted instead)
       table.string   :locked_by                    # Who is working on this object (if locked)
+      table.datetime :first_started_at             # When first worker picked it up
+      table.datetime :last_started_at              # When last worker picked it up (same as first_started_at when no retries)
+      table.datetime :finished_at                  # Used for statiscics / monitoring
       table.timestamps
     end
 	
     add_index :delayed_jobs, [:priority, :run_at], :name => 'delayed_jobs_priority'
   end
-  
+
   def self.down
     drop_table :delayed_jobs  
   end

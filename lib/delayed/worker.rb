@@ -14,9 +14,23 @@ module Delayed
     # (perhaps to inspect the reason for the failure), set this to false.
     cattr_accessor :destroy_failed_jobs
     self.destroy_failed_jobs = true
-    
+
+    # By default successful jobs are destroyed after finished.
+    # If you want to keep them around (for statistics/monitoring),
+    # set this to false.
+    cattr_accessor :destroy_successful_jobs
+    self.destroy_successful_jobs = true
+
+    # only useful if destroy_successful_jobs == false
+    # This will clear out the errors for a successful job
+    # since it succeeded, no reason to keep around
+    cattr_accessor :clear_successful_errors
+    self.clear_successful_errors = false
+
     self.logger = if defined?(Merb::Logger)
       Merb.logger
+    elsif defined?(Rails)
+      Rails.logger
     elsif defined?(RAILS_DEFAULT_LOGGER)
       RAILS_DEFAULT_LOGGER
     end
@@ -138,8 +152,17 @@ module Delayed
     def run(job)
       runtime =  Benchmark.realtime do
         Timeout.timeout(self.class.max_run_time.to_i) { job.invoke_job }
-        job.destroy
+
+        if destroy_successful_jobs
+          job.destroy
+        else
+          new_attributes={:finished_at => Delayed::Job.db_time_now, :failed_at => nil, :locked_at => nil, :locked_by => nil}
+          #sometimes, there is no reason to keep an error message (if the job ended up being successful)
+          new_attributes[:last_error]=nil if clear_successful_errors
+          job.update_attributes(new_attributes)
+        end
       end
+      # TODO: warn if runtime > max_run_time ?
       say "#{job.name} completed after %.4f" % runtime
       return true  # did work
     rescue Exception => e

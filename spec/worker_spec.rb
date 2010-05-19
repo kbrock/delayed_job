@@ -244,6 +244,91 @@ describe Delayed::Worker do
             (Delayed::Worker.max_attempts - 1).times { @job.invoke_job ; @worker.reschedule(@job) }
             @job.reload.failed_at.should == nil
           end
+        end #b.d.c.c
+      end #b.d.c
+
+      context "successful job with destroy turned off" do
+        before do
+          @worker = worker_create(:destroy_successful_jobs => false)
+        end
+
+        it "should be kept" do
+          Delayed::Job.count.should == 0
+          @job=job_create
+          @worker.run(@job)
+
+          Delayed::Job.count.should == 1
+        end
+
+        it "should be finished" do
+          job = job_create
+
+          job.reload.finished_at.should == nil
+          @worker.run(job)
+          job.reload.finished_at.should_not == nil
+        end
+
+        it "should record time when it was picked up by the first worker" do
+          job = job_create
+          job.reload.first_started_at.should == nil
+          job.reload.last_started_at.should == nil
+          @worker.work_off(1)
+          job.reload.first_started_at.should_not == nil
+          job.reload.last_started_at.should_not == nil
+        end
+
+        #see comment above, remvoed reload from *_started_at
+        it "should not update first_started_at on retries" do
+          job = job_create :payload_object => ErrorJob.new
+
+          @worker.work_off(1)
+          first_started_at = job.reload.first_started_at
+
+          now = Delayed::Job.send :db_time_now
+          job.run_at = now
+          job.save!
+
+          Delayed::Job.stub!(:db_time_now).and_return(now + 1.hour)
+          @worker.work_off(1)
+
+          job.reload.first_started_at.should == first_started_at
+        end
+
+        #see comment above, removed reload from *_started_at
+        it "should update last_started_at on retries" do
+          job = job_create :payload_object => ErrorJob.new
+
+          @worker.work_off(1)
+          first_started_at = job.reload.first_started_at
+
+          now = Delayed::Job.send :db_time_now
+          job.run_at = now
+          job.save!
+
+          Delayed::Job.stub!(:db_time_now).and_return(now + 1.hour)
+          @worker.work_off(1)
+
+          job.reload.last_started_at.should_not == first_started_at
+        end
+
+        it "should not clear errors if clear errors turned off" do
+          job=job_create
+          job.update_attributes(:last_error => 'previous error')
+          @worker.run(job)
+          job.reload.last_error.should == 'previous error'
+        end
+      end
+
+      context "successful job with no destroy and clear errors" do
+        before do
+          @worker = worker_create(:destroy_successful_jobs => false, :clear_successful_errors => true)
+        end
+
+        it "should clear errors if clear errors turned on" do
+          job=job_create
+          job.update_attributes(:last_error => 'previous error')
+          @worker.run(job)
+          job.reload.last_error.should == nil
         end
       end
     end #b.d
