@@ -4,8 +4,13 @@ task :merb_env
 
 namespace :jobs do
   desc "Clear the delayed_job queue."
-  task :clear => [:merb_env, :environment] do
-    Delayed::Job.delete_all
+  task :clear => :"clear:all"
+  namespace :clear do
+
+    desc "Clear the whole delayed_job queue."
+    task :all => [:merb_env, :environment] do
+      Delayed::Job.delete_all
+    end
   end
 
   desc "Start a delayed_job worker."

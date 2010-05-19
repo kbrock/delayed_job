@@ -85,7 +85,7 @@ module Delayed
     end
 
     def start
-      say "Starting job worker"
+      say "Starting job worker #{name}"
 
       trap('TERM') { say 'Exiting...'; $exit = true }
       trap('INT')  { say 'Exiting...'; $exit = true }
@@ -144,25 +144,40 @@ module Delayed
     rescue Exception => e
       handle_failed_job(job, e)
       return false  # work failed
+    rescue Delayed::DeserializationError => e
+      handle_failed_job(job, e, true)
+      return false  # work failed
     end
-    
+
     # Reschedule the job in the future (when a job fails).
     # Uses an exponential scale depending on the number of failed attempts.
-    def reschedule(job, time = nil)
-      if (job.attempts += 1) < self.class.max_attempts
-        time ||= Job.db_time_now + (job.attempts ** 4) + 5
-        job.run_at = time
-        job.unlock
-        job.save!
+    def reschedule(job,error=nil,force_kill=false)
+      # if we are not forcing a kill (default)
+      # and the number of attempts is within the number of times we want to try
+      if ! force_kill && job.attempts < self.class.max_attempts
+        schedule(job,error)
       else
-        say "PERMANENTLY removing #{job.name} because of #{job.attempts} consecutive failures.", Logger::INFO
+        remove(job,error)
+      end
+    end
 
-        if job.payload_object.respond_to? :on_permanent_failure
-          say "Running on_permanent_failure hook"
-          job.payload_object.on_permanent_failure
-        end
+    def schedule(job, error=nil)
+      time = Job.db_time_now + (job.attempts ** 4) + 5
+      job.run_at = time
+      job.unlock
+      job.save!
+    end
 
-        self.class.destroy_failed_jobs ? job.destroy : job.update_attributes(:failed_at => Delayed::Job.db_time_now)
+    def remove(job, error=nil)
+      say "PERMANENTLY removing #{job.name} because of #{job.attempts} consecutive failures.", Logger::INFO
+      if job.payload_object.respond_to? :on_permanent_failure
+        say "Running on_permanent_failure hook"
+        job.payload_object.on_permanent_failure
+      end
+      if self.class.destroy_failed_jobs
+        job.destroy
+      else
+        job.update_attributes({:failed_at => Delayed::Job.db_time_now, :finished_at => nil, :locked_at => nil, :locked_by => nil})
       end
     end
 
@@ -174,10 +189,11 @@ module Delayed
 
   protected
     
-    def handle_failed_job(job, error)
+    #TODO: override this one
+    def handle_failed_job(job, error, dont_run_again=false)
       job.last_error = error.message + "\n" + error.backtrace.join("\n")
       say "#{job.name} failed with #{error.class.name}: #{error.message} - #{job.attempts} failed attempts", Logger::ERROR
-      reschedule(job)
+      reschedule(job, error, dont_run_again)
     end
     
     # Run the next job we can get an exclusive lock on.
