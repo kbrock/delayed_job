@@ -17,4 +17,16 @@ namespace :jobs do
     end
     Delayed::Worker.new(options).start
   end
+
+  namespace :daemon do
+    desc "Start a background delayed_job worker"
+    task :start do
+      `#{File.expand_path(File.dirname(__FILE__) + '/../../script/delayed_job')} start`
+    end
+
+    desc "Stop background delayed_job worker"
+    task :stop do
+      `#{File.expand_path(File.dirname(__FILE__) + '/../../script/delayed_job')} stop`
+    end
+  end
 end
