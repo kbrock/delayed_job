@@ -89,6 +89,7 @@ module Delayed
 
       # Moved into its own method so that new_relic can trace it.
       def invoke_job
+        self.attempts += 1
         payload_object.perform
       end
       

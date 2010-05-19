@@ -169,9 +169,9 @@ describe Delayed::Worker do
 
             it "should run that hook" do
               @job.payload_object.should_receive :on_permanent_failure
-              Delayed::Worker.max_attempts.times { @worker.reschedule(@job) }
+              Delayed::Worker.max_attempts.times { @job.invoke_job ; @worker.reschedule(@job) }
             end
-          end
+          end #b.c.s.c
 
           context "when the job's payload has no #on_permanent_failure hook" do
             # It's a little tricky to test this in a straightforward way, 
@@ -193,7 +193,7 @@ describe Delayed::Worker do
 
             it "should not try to run that hook" do
               lambda do
-                Delayed::Worker.max_attempts.times { @worker.reschedule(@job) }
+                Delayed::Worker.max_attempts.times { @job.invoke_job ; @worker.reschedule(@job) }
               end.should_not raise_exception(NoMethodError)
             end
           end #b.d.c.s.c
@@ -210,13 +210,13 @@ describe Delayed::Worker do
           it "should be destroyed if it failed more than Worker.max_attempts times" do
             Delayed::Worker.destroy_failed_jobs.should == true
             @job.should_receive(:destroy)
-            Delayed::Worker.max_attempts.times { @worker.reschedule(@job) }
+            Delayed::Worker.max_attempts.times { @job.invoke_job ; @worker.reschedule(@job) }
             @job.attempts.should == Delayed::Worker.max_attempts
           end
 
           it "should not be destroyed if failed fewer than Worker.max_attempts times" do
             @job.should_not_receive(:destroy)
-            (Delayed::Worker.max_attempts - 1).times { @worker.reschedule(@job) }
+            (Delayed::Worker.max_attempts - 1).times { @job.invoke_job ; @worker.reschedule(@job) }
             @job.attempts.should == (Delayed::Worker.max_attempts - 1)
           end
 
@@ -236,12 +236,12 @@ describe Delayed::Worker do
 
           it "should be failed if it failed more than Worker.max_attempts times" do
             @job.reload.failed_at.should == nil
-            Delayed::Worker.max_attempts.times { @worker.reschedule(@job) }
+            Delayed::Worker.max_attempts.times { @job.invoke_job ; @worker.reschedule(@job) }
             @job.reload.failed_at.should_not == nil
           end
 
           it "should not be failed if it failed fewer than Worker.max_attempts times" do
-            (Delayed::Worker.max_attempts - 1).times { @worker.reschedule(@job) }
+            (Delayed::Worker.max_attempts - 1).times { @job.invoke_job ; @worker.reschedule(@job) }
             @job.reload.failed_at.should == nil
           end
         end
