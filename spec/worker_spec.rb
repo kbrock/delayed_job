@@ -219,6 +219,11 @@ describe Delayed::Worker do
             (Delayed::Worker.max_attempts - 1).times { @worker.reschedule(@job) }
             @job.attempts.should == (Delayed::Worker.max_attempts - 1)
           end
+
+          it "should be destroyed if force sent true" do
+            @job.should_receive(:destroy)
+            @worker.reschedule(@job,nil,true)
+          end
         end #b.d.c.c
 
         context "and we don't want to destroy jobs" do
