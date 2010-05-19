@@ -1,6 +1,6 @@
 shared_examples_for 'a backend' do
-  def create_job(opts = {})
-    @backend.create(opts.merge(:payload_object => SimpleJob.new))
+  def job_create(opts = {})
+    @backend.create({:payload_object => SimpleJob.new}.merge(opts))
   end
 
   before do
@@ -46,6 +46,12 @@ shared_examples_for 'a backend' do
     lambda { job.invoke_job }.should change { M::ModuleJob.runs }.from(0).to(1)
   end
   
+  it "should never find finished jobs" do
+    @job = job_create :payload_object => M::ModuleJob.new,
+      :finished_at => @backend.db_time_now
+    @backend.find_available(1).length.should == 0
+  end
+
   describe "payload_object" do
     it "should raise a DeserializationError when the job class is totally unknown" do
       job = @backend.new :handler => "--- !ruby/object:JobThatDoesNotExist {}"
@@ -66,41 +72,51 @@ shared_examples_for 'a backend' do
       job = @backend.new :handler => "--- !ruby/struct:Autoloaded::Struct {}"
       lambda { job.payload_object }.should_not raise_error(Delayed::Backend::DeserializationError)
     end
+
+    it "should not fail for name when the job class is totally unknown" do
+      job = @backend.new :handler => "--- !ruby/object:JobThatDoesNotExist {}"
+      lambda { job.name }.should_not raise_error
+    end
+
+    it "should never find failed jobs" do
+      @job = @backend.create :payload_object => SimpleJob.new, :attempts => 50, :failed_at => @backend.db_time_now
+      @backend.find_available('worker', 1).length.should == 0
+    end
   end
   
   describe "find_available" do
     it "should not find failed jobs" do
-      @job = create_job :attempts => 50, :failed_at => @backend.db_time_now
+      @job = job_create :attempts => 50, :failed_at => @backend.db_time_now
       @backend.find_available('worker', 5, 1.second).should_not include(@job)
     end
     
     it "should not find jobs scheduled for the future" do
-      @job = create_job :run_at => (@backend.db_time_now + 1.minute)
+      @job = job_create :run_at => (@backend.db_time_now + 1.minute)
       @backend.find_available('worker', 5, 4.hours).should_not include(@job)
     end
     
     it "should not find jobs locked by another worker" do
-      @job = create_job(:locked_by => 'other_worker', :locked_at => @backend.db_time_now - 1.minute)
+      @job = job_create(:locked_by => 'other_worker', :locked_at => @backend.db_time_now - 1.minute)
       @backend.find_available('worker', 5, 4.hours).should_not include(@job)
     end
     
     it "should find open jobs" do
-      @job = create_job
+      @job = job_create
       @backend.find_available('worker', 5, 4.hours).should include(@job)
     end
     
     it "should find expired jobs" do
-      @job = create_job(:locked_by => 'worker', :locked_at => @backend.db_time_now - 2.minutes)
+      @job = job_create(:locked_by => 'worker', :locked_at => @backend.db_time_now - 2.minutes)
       @backend.find_available('worker', 5, 1.minute).should include(@job)
     end
     
     it "should find own jobs" do
-      @job = create_job(:locked_by => 'worker', :locked_at => (@backend.db_time_now - 1.minutes))
+      @job = job_create(:locked_by => 'worker', :locked_at => (@backend.db_time_now - 1.minutes))
       @backend.find_available('worker', 5, 4.hours).should include(@job)
     end
 
     it "should find only the right amount of jobs" do
-      10.times { create_job }
+      10.times { job_create }
       @backend.find_available('worker', 7, 4.hours).should have(7).jobs
     end
   end
@@ -212,7 +228,7 @@ shared_examples_for 'a backend' do
   
   context "clear_locks!" do
     before do
-      @job = create_job(:locked_by => 'worker', :locked_at => @backend.db_time_now)
+      @job = job_create(:locked_by => 'worker', :locked_at => @backend.db_time_now)
     end
     
     it "should clear locks for the given worker" do
@@ -228,7 +244,7 @@ shared_examples_for 'a backend' do
   
   context "unlock" do
     before do
-      @job = create_job(:locked_by => 'worker', :locked_at => @backend.db_time_now)
+      @job = job_create(:locked_by => 'worker', :locked_at => @backend.db_time_now)
     end
 
     it "should clear locks" do
