@@ -1,9 +1,3 @@
-class NamedJob < Struct.new(:perform)
-  def display_name
-    'named_job'
-  end
-end
-
 shared_examples_for 'a backend' do
   def create_job(opts = {})
     @backend.create(opts.merge(:payload_object => SimpleJob.new))
@@ -12,6 +6,8 @@ shared_examples_for 'a backend' do
   before do
     Delayed::Worker.max_priority = nil
     Delayed::Worker.min_priority = nil
+
+    #@backend.delete_all
     SimpleJob.runs = 0
   end
   

@@ -17,6 +17,12 @@ class OnPermanentFailureJob < SimpleJob
   end
 end
 
+class NamedJob < Struct.new(:perform)
+  def display_name
+    'named_job'
+  end
+end
+
 module M
   class ModuleJob
     cattr_accessor :runs; self.runs = 0
