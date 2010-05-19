@@ -46,10 +46,27 @@ module Delayed
       end
     end
 
+    # may want to explicitly define these
+    # worker class:
+    #   quiet, name, name_prefix, max_run_time, sleep_delay, max_attempts
+    # class attributes with integer conversion:
+    #   min_priority, max_priority (converted to integer)
+    # class attributes (no conversion - accepts string or not coming from command line)
+    #   destroy_failed_jobs, destroy_successful_jobs, clear_successful_errors
     def initialize(options={})
-      @quiet = options[:quiet]
-      self.class.min_priority = options[:min_priority] if options.has_key?(:min_priority)
-      self.class.max_priority = options[:max_priority] if options.has_key?(:max_priority)
+      options.each_pair do |key,value|
+        if value.present?
+          value=value.to_i if [:max_priority, :min_priority, :max_attempts, :sleep_delay].include?(key)
+          setter="#{key}="
+          if self.respond_to? setter
+            self.send(setter,value)
+          elsif self.class.respond_to? setter
+            self.class.send(setter,value)
+          else
+            say "unknown worker attribute #{key}"
+          end
+        end
+      end
     end
 
     # Every worker has a unique name which by default is the pid of the process. There are some

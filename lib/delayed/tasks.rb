@@ -10,6 +10,11 @@ namespace :jobs do
 
   desc "Start a delayed_job worker."
   task :work => [:merb_env, :environment] do
-    Delayed::Worker.new(:min_priority => ENV['MIN_PRIORITY'], :max_priority => ENV['MAX_PRIORITY']).start
+    options={}
+    [:min_priority, :max_priority, :max_attempts, :max_run_time, :sleep_delay].each do |key|
+      value=ENV[key.to_s.upcase]
+      options[key]=value if value.present?
+    end
+    Delayed::Worker.new(options).start
   end
 end
