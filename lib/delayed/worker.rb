@@ -54,17 +54,18 @@ module Delayed
     # class attributes (no conversion - accepts string or not coming from command line)
     #   destroy_failed_jobs, destroy_successful_jobs, clear_successful_errors
     def initialize(options={})
+      @quiet=options.delete(:quiet)
+
+      talk=options.has_key?(:destroy_successful_jobs)
       options.each_pair do |key,value|
-        if value.present?
-          value=value.to_i if [:max_priority, :min_priority, :max_attempts, :sleep_delay].include?(key)
-          setter="#{key}="
-          if self.respond_to? setter
-            self.send(setter,value)
-          elsif self.class.respond_to? setter
-            self.class.send(setter,value)
-          else
-            say "unknown worker attribute #{key}"
-          end
+        value=value.to_i if [:max_priority, :min_priority, :max_attempts, :sleep_delay].include?(key) && value.present?
+        setter="#{key}="
+        if self.respond_to? setter
+          self.send(setter,value)
+        elsif self.class.respond_to? setter
+          self.class.send(setter,value)
+        else
+          say "unknown worker attribute #{key}"
         end
       end
     end
